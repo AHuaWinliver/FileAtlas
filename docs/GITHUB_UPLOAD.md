@@ -1,5 +1,7 @@
 # 上传到 GitHub
 
+项目公开仓库：[AHuaWinliver/FileAtlas](https://github.com/AHuaWinliver/FileAtlas)。下面说明如何上传自己的副本或发布后续版本。
+
 建议仓库名称为 `FileAtlas`，简介：
 
 > Windows 智能文件整理工具：Claude Code 自动标签、多级分类、目录监控与可撤销归档。
@@ -17,7 +19,7 @@
 
 ## 使用 Git 推送
 
-在此目录打开 PowerShell。此整理目录已经初始化 `main` 分支，尚未创建提交，也没有绑定远程仓库。
+在自己的新仓库目录打开 PowerShell。如果从源码 ZIP 解压，先运行 `git init -b main`。以下示例用于首次推送到自己的空仓库：
 
 ```powershell
 git add .
@@ -26,7 +28,7 @@ git remote add origin https://github.com/YOUR_USERNAME/FileAtlas.git
 git push -u origin main
 ```
 
-将 `YOUR_USERNAME` 替换为自己的 GitHub 用户名；首次使用 Git 时，先配置自己的提交姓名和邮箱。源码 ZIP 不包含 `.git`，若从 ZIP 解压，则先运行 `git init -b main`。
+将 `YOUR_USERNAME` 替换为自己的 GitHub 用户名；首次使用 Git 时，先配置自己的提交姓名和邮箱。已有仓库可通过 Fork 或 Clone 继续开发，无需重复创建仓库或添加远程地址。
 
 ## 上传可运行程序
 

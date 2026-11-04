@@ -18,7 +18,7 @@ class FakeClassifier:
 class FileSafetyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.source = self.root / '收件箱'
         self.source.mkdir()
         self.store = Store(self.root / 'state')

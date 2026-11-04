@@ -34,7 +34,7 @@ FileAtlas 是一款面向 Windows 11 的本地文件整理桌面应用。设置�
 
 ### 使用 Windows 便携版
 
-从仓库的 **Releases** 页面下载 `FileAtlas-0.1.0-win64.zip`（由维护者上传后可用），解压后运行 `FileAtlas.exe`。请保留同目录的 `_internal` 文件夹。
+从 [Releases](https://github.com/AHuaWinliver/FileAtlas/releases) 下载 `FileAtlas-0.1.0-win64.zip`，解压后运行 `FileAtlas.exe`。请保留同目录的 `_internal` 文件夹。
 
 1. 在 **分类与目录** 中新建分类，设置保存地址和分类依据，或导入已有目录。
 2. 在 **自动化设置** 中选择默认整理源，确认 `claude.exe` 路径并保存。
