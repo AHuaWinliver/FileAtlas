@@ -1,6 +1,7 @@
 <div align="center">
   <img src="assets/app-icon.png" width="88" alt="FileAtlas 图标">
   <h1>FileAtlas</h1>
+  <p><a href="README.md">简体中文</a> · <a href="README.en.md">English</a></p>
   <p>让每一份文件，各归其位。</p>
   <p>Windows 智能文件整理 · Claude Code 自动标签 · 多级分类 · 实时目录</p>
   <p>

@@ -33,7 +33,7 @@ def main():
         assert stage.is_relative_to(out.resolve())
         package = stage / name
         shutil.copytree(exe.parent, package)
-        for file in ('README.md', 'LICENSE', 'CHANGELOG.md', 'THIRD_PARTY_NOTICES.md'):
+        for file in ('README.md', 'README.en.md', 'LICENSE', 'CHANGELOG.md', 'THIRD_PARTY_NOTICES.md'):
             shutil.copy2(ROOT / file, package / file)
         shutil.copytree(ROOT / 'docs', package / 'docs')
         shutil.copytree(ROOT / 'assets', package / 'assets')
