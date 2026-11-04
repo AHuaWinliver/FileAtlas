@@ -1,0 +1,32 @@
+# Python and environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Local data and build outputs
+build/
+dist/
+release/
+validation/
+*.sqlite3*
+*.db
+*.log
+*.zip
+
+# Credentials and editor state
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.claude/
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
