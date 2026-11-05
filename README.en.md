@@ -22,6 +22,8 @@ The application interface is currently in Simplified Chinese. This README provid
 
 ## Features
 
+**New in 0.2.0: CAE workspace and project templates.** Preview the directory layout, create project stages and a baseline case, configure destinations, require review for ambiguous project IDs, and preserve native solver files and detected case companions. See the [CAE workflow](docs/CAE_WORKFLOW.md) and [quick start](docs/QUICK_START.md) (Chinese).
+
 | Feature | Description |
 | --- | --- |
 | Hierarchical categories | Create parent and child categories, each with its own destination and classification guidance |
@@ -37,7 +39,7 @@ The application interface is currently in Simplified Chinese. This README provid
 
 ### Windows portable application
 
-Download `FileAtlas-0.1.0-win64.zip` from [Releases](https://github.com/AHuaWinliver/FileAtlas/releases), extract it, and run `FileAtlas.exe`. Keep the `_internal` folder alongside the executable.
+Download `FileAtlas-0.2.0-win64.zip` from [Releases](https://github.com/AHuaWinliver/FileAtlas/releases), extract it, and run `FileAtlas.exe`. Keep the `_internal` folder alongside the executable.
 
 1. Open **Categories & Catalog** (`分类与目录`). Create categories and set their destinations and classification guidance, or import an existing folder structure.
 2. Open **Automation Settings** (`自动化设置`). Select your source folders, check the `claude.exe` path, and save.

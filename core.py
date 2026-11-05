@@ -14,6 +14,7 @@ import time
 import uuid
 import sys
 from datetime import datetime
+from cae import allowed_category, protected_source, review_reason, install_workspace, create_project
 
 
 def stamp():
@@ -201,7 +202,7 @@ class ClaudeClassifier:
         self.store = store
 
     def classify(self, path):
-        cats = self.store.categories()
+        cats = [c for c in self.store.categories() if allowed_category(self.store, c['id'])]
         if not cats:
             raise ValueError('请先设置至少一个分类')
         payload = {'categories': [dict(id=c['id'], name=self.store.category_name(c['id']), description=c['description']) for c in cats],
@@ -295,6 +296,14 @@ class Engine:
         self.classifier = classifier or ClaudeClassifier(store)
         self.operation_lock = threading.RLock()
 
+    def setup_cae_workspace(self, root):
+        with self.operation_lock:
+            return install_workspace(self.store, root)
+
+    def create_cae_project(self, workspace, project_id, client, name, keywords=''):
+        with self.operation_lock:
+            return create_project(self.store, workspace, project_id, client, name, keywords)
+
     def import_tree(self, directory):
         with self.operation_lock:
             root = Path(directory).resolve()
@@ -374,18 +383,31 @@ class Engine:
             sig = f'{before.st_size}:{before.st_mtime_ns}'
             if self.store.rows('SELECT id FROM files WHERE source=? AND signature=?', (str(p), sig)):
                 return
-            d = validate_decision(self.classifier.classify(p), self.store.categories())
+            protected = protected_source(self.store, p)
+            if protected:
+                d = dict(category_id=None, tags=['CAE', '完整工况保留'], confidence=0,
+                         reason='求解文件或工况配套文件受保护，保留原位；请按完整工况目录处理。')
+            else:
+                d = validate_decision(self.classifier.classify(p), self.store.categories())
+                if d['category_id'] and not allowed_category(self.store, d['category_id']):
+                    raise ValueError('该分类是目录容器或受保护的工况，不能接收零散文件')
+            hold = review_reason(self.store, p, d['category_id']) if not protected else ''
+            if hold:
+                d['reason'] = hold + ' ' + d['reason']
+            project = self.store.get('category_policies', {}).get(d['category_id'], {}).get('project_id')
+            if project:
+                d['tags'] = list(dict.fromkeys([project] + d['tags']))[:12]
             after = p.stat()
             if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
                 raise RuntimeError('分类期间文件发生变化，稍后重新扫描')
             fid = uuid.uuid4().hex
-            self.store.run("UPDATE files SET status='superseded',updated=? WHERE source=? AND status='review'", (stamp(), str(p)))
+            self.store.run("UPDATE files SET status='superseded',updated=? WHERE source=? AND status IN ('review','protected')", (stamp(), str(p)))
             self.store.run('INSERT INTO files VALUES(?,?,?,?,?,?,?,?,?,?)',
-                           (fid, str(p), str(p), sig, d['category_id'], json.dumps(d['tags'], ensure_ascii=False), d['confidence'], d['reason'], 'review', stamp()))
-            if d['category_id'] and d['confidence'] >= self.store.get('threshold', .85) and self.store.get('auto_apply', False):
+                           (fid, str(p), str(p), sig, d['category_id'], json.dumps(d['tags'], ensure_ascii=False), d['confidence'], d['reason'], 'protected' if protected else 'review', stamp()))
+            if not protected and not hold and d['category_id'] and d['confidence'] >= self.store.get('threshold', .85) and self.store.get('auto_apply', False):
                 self.apply(fid)
             else:
-                self.store.event('待审核', p.name + '：' + d['reason'])
+                self.store.event('受保护' if protected else '待审核', p.name + '：' + d['reason'])
 
     def apply(self, fid, category=None):
         with self.operation_lock:
@@ -396,7 +418,11 @@ class Engine:
             cat = self.store.rows('SELECT * FROM categories WHERE id=?', (cid,))
             if not cat:
                 raise ValueError('请先选择有效分类')
+            if not allowed_category(self.store, cid):
+                raise ValueError('该分类为容器或受保护的工况目录，请选择普通资料分类')
             src = Path(f['path'])
+            if protected_source(self.store, src):
+                raise ValueError('该文件属于受保护的求解任务，不允许拆分整理')
             st = src.stat()
             if f['signature'] != f'{st.st_size}:{st.st_mtime_ns}':
                 raise ValueError('源文件已变化，请重新分析')

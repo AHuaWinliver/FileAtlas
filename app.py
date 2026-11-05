@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, 
     QDialog, QDialogButtonBox, QFileDialog, QMessageBox, QFrame, QSystemTrayIcon, QMenu, QAbstractItemView, QGraphicsOpacityEffect, QSizeGrip, QScrollArea)
 from core import Store, Engine, extract, initialize_local_model
 from worker import Worker
+from cae import allowed_category
+from cae_ui import CAEDialog
 
 
 STYLE = '''
@@ -414,6 +416,12 @@ class Window(QMainWindow):
 
     def make_categories(self):
         box = self.page()
+        cae_row = QHBoxLayout()
+        cae_row.addWidget(button('创建 CAE 工作空间', lambda: self.cae_template(False), True))
+        cae_row.addWidget(button('新建工程项目', lambda: self.cae_template(True)))
+        cae_row.addWidget(label('项目 → 工作阶段 → 工况 · 求解文件保护', 'muted'))
+        cae_row.addStretch()
+        box.addLayout(cae_row)
         box.addWidget(label('逻辑分类支持多级嵌套，每个节点均有独立保存地址。修改地址只影响以后的整理。', 'muted'))
         row = QHBoxLayout()
         row.addWidget(button('＋ 新建分类', self.add_category, True))
@@ -512,6 +520,9 @@ class Window(QMainWindow):
         return item.data(Qt.ItemDataRole.UserRole) if item else None
 
     def refresh(self):
+        if getattr(self, 'template_pending', False) and not self.worker.busy:
+            self.sources.setPlainText('\n'.join(self.store.get('sources', [])))
+            self.template_pending = False
         cats = self.store.categories()
         counts = self.store.rows('SELECT status,COUNT(*) n FROM files GROUP BY status')
         c = {r['status']: r['n'] for r in counts}
@@ -527,7 +538,8 @@ class Window(QMainWindow):
         self.review_combo.clear()
         self.review_combo.addItem('使用 AI 推荐分类', None)
         for cat in cats:
-            self.review_combo.addItem(self.store.category_name(cat['id']), cat['id'])
+            if allowed_category(self.store, cat['id']):
+                self.review_combo.addItem(self.store.category_name(cat['id']), cat['id'])
         self.review_combo.setCurrentIndex(max(0, self.review_combo.findData(selected)))
         self.tree.clear()
         def walk(parent, widget):
@@ -585,7 +597,7 @@ class Window(QMainWindow):
             rows = []
             for f in files:
                 cat = self.store.category_name(f['category']) or '未匹配分类'
-                rows.append((f['id'], [Path(f['path']).name, cat, ' · '.join(json.loads(f['tags'])), f"{f['confidence']:.0%}" if f['status'] != 'indexed' else '位置索引', {'review':'待审核','done':'已整理','undone':'已撤销','indexed':'原有文件','missing':'文件已移走','superseded':'已有新版本'}.get(f['status'], f['status']), f['updated']]))
+                rows.append((f['id'], [Path(f['path']).name, cat, ' · '.join(json.loads(f['tags'])), f"{f['confidence']:.0%}" if f['status'] != 'indexed' else '位置索引', {'review':'待审核','done':'已整理','undone':'已撤销','indexed':'原有文件','missing':'文件已移走','superseded':'已有新版本','protected':'工况文件受保护'}.get(f['status'], f['status']), f['updated']]))
             self.fill(table, rows)
 
     def file(self, review):
@@ -664,6 +676,21 @@ class Window(QMainWindow):
     def add_category(self):
         if CategoryDialog(self.store, parent=self).exec():
             self.refresh()
+
+    def cae_template(self, project):
+        if self.worker.busy:
+            QMessageBox.information(self, '正在处理', '请等待当前任务完成后创建模板。')
+            return
+        if project and not self.store.get('cae_workspaces', []):
+            QMessageBox.information(self, '请先创建工作空间', '先选择“创建 CAE 工作空间”，再按项目编号建立工程项目。')
+            return
+        dialog = CAEDialog(self.store, project, self)
+        if dialog.exec() and dialog.arguments:
+            self.template_pending = True
+            self.worker.monitoring = False
+            self.watch_btn.setText('启动自动监控')
+            self.worker.enqueue('create_cae_project' if project else 'setup_cae_workspace', *dialog.arguments)
+            self.statusBar().showMessage('正在创建 CAE 分类与目录，完成后可刷新并查看…')
 
     def import_tree(self):
         path = QFileDialog.getExistingDirectory(self, '选择现有分类目录（读取目录和文件，不移动文件）')

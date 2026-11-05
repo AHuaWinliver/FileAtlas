@@ -20,6 +20,8 @@ FileAtlas 是一款面向 Windows 11 的本地文件整理桌面应用。设置�
 
 ## 功能
 
+**0.2.0 新增 CAE 工程模板**：预览创建工作空间，按项目编号建立阶段目录及基准工况，支持独立保存地址、项目编号审核和求解文件保护。详见 [CAE 工程流程](docs/CAE_WORKFLOW.md) 与 [快速使用说明](docs/QUICK_START.md)。
+
 | 功能 | 说明 |
 | --- | --- |
 | 多级分类 | 自定义父子分类，每个节点可设置独立保存地址与分类依据 |
@@ -35,7 +37,7 @@ FileAtlas 是一款面向 Windows 11 的本地文件整理桌面应用。设置�
 
 ### 使用 Windows 便携版
 
-从 [Releases](https://github.com/AHuaWinliver/FileAtlas/releases) 下载 `FileAtlas-0.1.0-win64.zip`，解压后运行 `FileAtlas.exe`。请保留同目录的 `_internal` 文件夹。
+从 [Releases](https://github.com/AHuaWinliver/FileAtlas/releases) 下载 `FileAtlas-0.2.0-win64.zip`，解压后运行 `FileAtlas.exe`。请保留同目录的 `_internal` 文件夹。
 
 1. 在 **分类与目录** 中新建分类，设置保存地址和分类依据，或导入已有目录。
 2. 在 **自动化设置** 中选择默认整理源，确认 `claude.exe` 路径并保存。

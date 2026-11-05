@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FileAtlas 0.2.0 使用说明</title>
+<style>body{margin:0;background:#f1f5fb;color:#25374b;font:16px/1.8 "Segoe UI","Microsoft YaHei",sans-serif}main{max-width:900px;margin:40px auto;padding:36px;background:white;border-radius:18px}h1{font-size:32px}h2{margin-top:32px;color:#176aab}code,pre{background:#edf3fa;border-radius:6px;padding:3px 7px}pre{padding:18px;overflow:auto}a{color:#176aab}.note{background:#edf7ff;border-left:4px solid #2478b7;padding:16px}li{margin:8px 0}@media(max-width:700px){main{margin:12px;padding:20px}}</style>
+<main><p>WINDOWS 11 · CAE 工程文件管理</p><h1>FileAtlas 0.2.0 使用说明</h1>
+<p>创建工程目录，给独立资料自动打标签与归类，同时保留求解任务的依赖关系。</p>
+<h2>1. 安装与启动</h2><ul><li>安装版：运行 <code>FileAtlas-0.2.0-Setup.exe</code>，按向导安装到当前用户目录。</li><li>便携版：解压 <code>FileAtlas-0.2.0-win64.zip</code>，双击 <code>FileAtlas.exe</code>，保留旁边的 <code>_internal</code> 文件夹。</li><li>AI 分类需自行安装、登录并配置 Windows 原生 Claude Code。没有模型配置时仍可创建目录和项目。</li></ul>
+<h2>2. 创建 CAE 工作空间</h2><ol><li>打开“分类与目录”→“创建 CAE 工作空间”。</li><li>选择根目录，检查预览，再确认创建。</li><li>软件建立待整理、项目库、公共资源库、知识与方法、已结项归档。</li><li>点击“新建工程项目”，填写项目编号、客户或部门、项目名称和分类关键词。</li></ol>
+<pre>项目编号_客户_项目名称/
+├─ 00_项目管理
+├─ 01_原始输入
+├─ 02_模型准备
+├─ 03_仿真任务/C001_基准工况/输入、求解、日志
+├─ 04_结果分析
+├─ 05_报告与交付
+└─ 90_历史版本</pre>
+<h2>3. 扫描与自动归档</h2><ol><li>在“自动化设置”确认整理源、Claude Code 路径与模型，保存。</li><li>将独立资料放入 <code>00_待整理</code>。推荐文件名：<code>P2026-001_齿轮箱_分析报告_V03.docx</code>。</li><li>点击“扫描源文件夹”，先在“待审核”确认分类。</li><li>确认效果后，设置复制或移动方式，开启“自动执行”，点击“启动自动监控”。</li></ol>
+<div class="note">项目编号不明、多项目编号冲突或分类不匹配时，必须人工审核。原生求解文件及识别到的工况配套资料保留原位。保护规则不能代替完整求解器依赖解析，活动求解目录请放在监控源之外。</div>
+<h2>4. 搜索、目录与撤销</h2><ul><li>“文件资料库”：按文件名、路径、分类和标签搜索，查看保护原因。</li><li>“分类与目录”：编辑各节点保存地址、导出 Markdown 文件树；改地址不搬移现有文件。</li><li>“整理记录”：选择成功操作并撤销；文件已被修改或原路径被占用时会阻止撤销。</li></ul>
+<h2>5. 退出、更新与数据</h2><p>关闭窗口默认继续在托盘运行。右键托盘图标退出后，再安装更新。重新启动程序后需手动启动监控。</p><p>配置、标签和历史保存在 <code>%LOCALAPPDATA%\FileAtlas</code>，卸载保留此目录。备份时先退出程序，再复制整个目录。</p><p>使用云模型时，文件名、路径及启用的内容摘录会发送给所配置的服务；可关闭内容提取。</p>
+<h2>6. 源码与其他文档</h2><p>解压源码 ZIP，使用 Python 3.12 创建虚拟环境，安装 <code>requirements-dev.txt</code> 后运行 <code>app.py</code>。工程规则见 <a href="CAE_WORKFLOW.md">CAE_WORKFLOW.md</a>，通用说明见 <a href="USER_GUIDE.md">USER_GUIDE.md</a>。源码同时附有中英文 README。</p>
+<p>验证范围：22 项核心与工程规则测试、界面与 EXE 启动检查。安装程序已编译，尚未执行真实安装/卸载测试；未完成大规模耐久与断电故障注入测试。</p></main></html>
