@@ -28,9 +28,14 @@ store.set('auto_apply', True)
 store.set('mode', 'move')
 classifier = Classifier(cid)
 worker = Worker(Engine(store, classifier))
-worker.monitoring = True
+(src / '新文件.txt').write_text('监控启动前已存在', encoding='utf-8')
 worker.start()
-QTimer.singleShot(500, lambda: (src / '新文件.txt').write_text('内容1', encoding='utf-8'))
+
+def start_monitoring():
+    worker.monitoring = True
+    worker.wake.set()
+
+QTimer.singleShot(500, start_monitoring)
 QTimer.singleShot(8500, lambda: (src / '新文件.txt').write_text('内容2 changed', encoding='utf-8'))
 def finish():
     worker.monitoring = False
@@ -46,7 +51,7 @@ def finish():
         assert classifier.calls == 2, classifier.calls
         assert all(Path(r['destination']).exists() for r in rows)
         assert len(set(r['destination'] for r in rows)) == 2
-        print(json.dumps({'watcher': 'PASS', 'new_and_updated_file': 'PASS', 'collision': 'PASS', 'operations': len(rows)}, indent=2))
+        print(json.dumps({'idle_to_monitoring': 'PASS', 'existing_and_updated_file': 'PASS', 'collision': 'PASS', 'operations': len(rows)}, indent=2))
     except Exception as exc:
         print(repr(exc), file=sys.stderr)
         code = 1

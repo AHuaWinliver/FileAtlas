@@ -59,15 +59,25 @@ class Worker(QThread):
             if watched != sources:
                 if observer:
                     observer.stop()
-                    observer.join()
+                    if observer.is_alive():
+                        observer.join()
                 observer = Observer()
                 for src in sources:
+                    if not Path(src).is_dir():
+                        self.engine.store.event('错误', '整理源无法访问：' + src)
+                        self.changed.emit()
+                        continue
                     try:
                         observer.schedule(Events(), src, recursive=True)
                     except OSError as exc:
                         self.engine.store.event('错误', '监控失败：' + str(exc))
                 if sources:
-                    observer.start()
+                    try:
+                        observer.start()
+                    except OSError as exc:
+                        observer.stop()
+                        self.engine.store.event('错误', '目录事件监控启动失败，继续定时扫描：' + str(exc))
+                        self.changed.emit()
                 watched = sources
                 last_scan = 0
             with self.guard:

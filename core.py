@@ -1,5 +1,6 @@
 """FileAtlas: persistent catalog and conservative, journaled file operations."""
 from __future__ import annotations
+import errno
 import hashlib
 import json
 import math
@@ -191,9 +192,18 @@ class Store:
                     walk(c['id'], depth + 1)
         walk(None, 0)
         target = Path(target or self.home / '文件目录.md')
-        temp = target.with_name(target.name + '.tmp')
-        temp.write_text('\n'.join(lines) + '\n', encoding='utf-8')
-        os.replace(temp, target)
+        temp = target.with_name(f'{target.name}.{uuid.uuid4().hex}.tmp')
+        content = '\n'.join(lines) + '\n'
+        try:
+            temp.write_text(content, encoding='utf-8')
+            try:
+                os.replace(temp, target)
+            except OSError as exc:
+                if exc.errno != errno.EXDEV:
+                    raise
+                target.write_text(content, encoding='utf-8')
+        finally:
+            temp.unlink(missing_ok=True)
         return target
 
 
@@ -388,7 +398,22 @@ class Engine:
                 d = dict(category_id=None, tags=['CAE', '完整工况保留'], confidence=0,
                          reason='求解文件或工况配套文件受保护，保留原位；请按完整工况目录处理。')
             else:
-                d = validate_decision(self.classifier.classify(p), self.store.categories())
+                categories = self.store.categories()
+                suffix = p.suffix.casefold()
+                matches = []
+                for category in categories:
+                    for line in category['description'].splitlines():
+                        if not line.startswith('扩展名规则：'):
+                            continue
+                        extensions = line.partition('：')[2].casefold().replace('，', ' ').replace(',', ' ').split()
+                        if suffix in extensions and allowed_category(self.store, category['id']):
+                            matches.append(category['id'])
+                            break
+                if len(matches) == 1:
+                    d = dict(category_id=matches[0], tags=[suffix.lstrip('.')], confidence=1,
+                             reason='匹配扩展名规则 ' + suffix)
+                else:
+                    d = validate_decision(self.classifier.classify(p), categories)
                 if d['category_id'] and not allowed_category(self.store, d['category_id']):
                     raise ValueError('该分类是目录容器或受保护的工况，不能接收零散文件')
             hold = review_reason(self.store, p, d['category_id']) if not protected else ''

@@ -1,7 +1,9 @@
+import errno
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 from core import Store, Engine, validate_decision
 
 
@@ -43,6 +45,24 @@ class FileSafetyTests(unittest.TestCase):
         self.assertEqual(self.fake.calls, 1)
         self.assertEqual(f['status'], 'review')
         self.assertEqual(json.loads(f['tags']), ['工程', '设计'])
+
+    def test_explicit_extension_rule_files_without_model(self):
+        cid = self.store.save_category('安装程序', str(self.root / '安装程序'), '扩展名规则：.exe .msi')
+        self.store.set('auto_apply', True)
+        installer = self.source / 'Sample.EXE'
+        installer.write_bytes(b'demo')
+        self.engine.process(installer)
+        f = self.store.rows('SELECT * FROM files')[0]
+        self.assertEqual((f['category'], f['status'], self.fake.calls), (cid, 'done', 0))
+        self.assertTrue((self.root / '安装程序' / installer.name).is_file())
+
+    def test_cross_device_catalog_replace_keeps_archive_successful(self):
+        self.store.set('auto_apply', True)
+        with patch('core.os.replace', side_effect=OSError(errno.EXDEV, 'cross-device rename')):
+            self.engine.process(self.file)
+        self.assertEqual(self.store.rows('SELECT status FROM operations')[0]['status'], 'done')
+        self.assertIn(self.file.name, (self.store.home / '文件目录.md').read_text(encoding='utf-8'))
+        self.assertEqual(list(self.store.home.glob('*.tmp')), [])
 
     def test_collision_copy_and_undo(self):
         root = self.root / '归档'

@@ -39,12 +39,14 @@ The application interface is currently in Simplified Chinese. This README provid
 
 ### Windows portable application
 
-Download `FileAtlas-0.2.0-win64.zip` from [Releases](https://github.com/AHuaWinliver/FileAtlas/releases), extract it, and run `FileAtlas.exe`. Keep the `_internal` folder alongside the executable.
+Download `FileAtlas-0.2.1-win64.zip`, extract it, and run `FileAtlas.exe`. Keep the `_internal` folder alongside the executable. [GitHub Releases](https://github.com/AHuaWinliver/FileAtlas/releases)
 
 1. Open **Categories & Catalog** (`分类与目录`). Create categories and set their destinations and classification guidance, or import an existing folder structure.
 2. Open **Automation Settings** (`自动化设置`). Select your source folders, check the `claude.exe` path, and save.
 3. Click **Scan Source Folders** (`扫描源文件夹`), then check the suggestions in **Review** (`待审核`).
-4. Once the results meet your needs, choose copy or move mode, enable **Automatic Execution** (`自动执行`), and click **Start Monitoring** (`启动自动监控`).
+4. Once the results meet your needs, choose copy or move mode and click **Save and Start Automatic Filing** (`保存并启动自动整理`).
+
+To file by type, add `扩展名规则：.pdf .docx` on its own line in the category guidance. A single matching category receives the file and an extension tag. With zero or multiple matches, FileAtlas uses model classification.
 
 The initial defaults use copy mode and require manual review. Closing the window can leave the application running in the system tray; right-click its tray icon to exit. Monitoring must be started again after restarting the application.
 

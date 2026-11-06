@@ -37,12 +37,14 @@ FileAtlas 是一款面向 Windows 11 的本地文件整理桌面应用。设置�
 
 ### 使用 Windows 便携版
 
-从 [Releases](https://github.com/AHuaWinliver/FileAtlas/releases) 下载 `FileAtlas-0.2.0-win64.zip`，解压后运行 `FileAtlas.exe`。请保留同目录的 `_internal` 文件夹。
+下载 `FileAtlas-0.2.1-win64.zip`，解压后运行 `FileAtlas.exe`。请保留同目录的 `_internal` 文件夹。[GitHub Releases](https://github.com/AHuaWinliver/FileAtlas/releases)
 
 1. 在 **分类与目录** 中新建分类，设置保存地址和分类依据，或导入已有目录。
 2. 在 **自动化设置** 中选择默认整理源，确认 `claude.exe` 路径并保存。
 3. 点击 **扫描源文件夹**，到 **待审核** 检查分类建议。
-4. 确认效果后，选择复制或移动模式，开启 **自动执行**，再点击 **启动自动监控**。
+4. 确认效果后，选择复制或移动模式，再点击 **保存并启动自动整理**。
+
+需要按文件类型归类时，在「编辑分类」的分类依据中另起一行填写 `扩展名规则：.pdf .docx`。只有一个分类匹配时，按规则归类并添加扩展名标签。其余情况交给模型分类。
 
 初始默认采用复制模式并保留人工审核。关闭窗口后可继续在托盘运行；右键托盘图标可退出。重新启动应用后需要再次启动监控。
 

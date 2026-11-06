@@ -162,7 +162,7 @@ class CategoryDialog(QDialog):
         row.addWidget(self.destination)
         row.addWidget(button('浏览', self.browse))
         self.description = QPlainTextEdit((category or {}).get('description', ''))
-        self.description.setPlaceholderText('描述这类文件的主题、项目、用途和典型关键词，帮助 AI 判断。')
+        self.description.setPlaceholderText('填写分类依据。可另起一行填写扩展名规则，例如「扩展名规则：.pdf .docx」。')
         form.addRow('分类名称', self.name)
         form.addRow('父级分类', self.parent_box)
         form.addRow('保存地址', row)
@@ -494,6 +494,7 @@ class Window(QMainWindow):
         box.addWidget(label('文件先等待至少 3 秒稳定；同名文件保留双方；目标目录从源监控中排除；失败记录写入“整理记录”。', 'muted'))
         row = QHBoxLayout()
         row.addWidget(button('保存设置', self.save_settings, True))
+        row.addWidget(button('保存并启动自动整理', self.save_and_start))
         row.addWidget(button('检测 Claude Code', self.check_claude))
         row.addWidget(button('打开应用数据目录', lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.store.home)))))
         row.addStretch()
@@ -626,21 +627,43 @@ class Window(QMainWindow):
             import subprocess
             subprocess.Popen(['explorer.exe', '/select,', f['path']])
 
+    def ready_to_scan(self):
+        sources = self.store.get('sources', [])
+        if not any(Path(source).is_dir() for source in sources):
+            QMessageBox.information(self, '请检查整理源', '请保存至少一个可访问的整理源文件夹。')
+            return False
+        if not any(allowed_category(self.store, cat['id']) for cat in self.store.categories()):
+            QMessageBox.information(self, '请检查分类', '请先添加至少一个可以接收文件的分类。')
+            return False
+        if not self.worker.isRunning():
+            self.worker.start()
+        return True
+
     def scan(self):
-        if not self.store.categories() or not self.store.get('sources', []):
-            QMessageBox.information(self, '请完成配置', '请先保存分类和默认整理源文件夹。')
+        if not self.ready_to_scan():
             return
         self.worker.request_scan()
         self.statusBar().showMessage('正在扫描，等待文件写入稳定后开始分析…')
 
-    def toggle_watch(self):
-        if not self.worker.monitoring and (not self.store.categories() or not self.store.get('sources', [])):
-            self.scan()
+    def start_monitoring(self):
+        if self.worker.monitoring or not self.ready_to_scan():
             return
-        self.worker.monitoring = not self.worker.monitoring
+        self.worker.monitoring = True
+        self.watch_btn.setText('暂停自动监控')
+        message = '开始扫描现有文件，符合条件时自动归档' if self.store.get('auto_apply', False) else '开始扫描现有文件，分类结果进入待审核'
+        self.store.event('监控', message)
+        self.statusBar().showMessage(message)
         self.worker.wake.set()
-        self.watch_btn.setText('暂停自动监控' if self.worker.monitoring else '启动自动监控')
-        self.statusBar().showMessage('自动监控已启动' if self.worker.monitoring else '已暂停；当前任务完成后停止扫描')
+        self.refresh()
+
+    def toggle_watch(self):
+        if not self.worker.monitoring:
+            self.start_monitoring()
+            return
+        self.worker.monitoring = False
+        self.worker.wake.set()
+        self.watch_btn.setText('启动自动监控')
+        self.statusBar().showMessage('已暂停；当前任务完成后停止扫描')
 
     def apply_selected(self):
         f = self.file(True)
@@ -739,22 +762,29 @@ class Window(QMainWindow):
     def save_settings(self):
         if self.worker.busy:
             QMessageBox.information(self, '正在处理', '请等待当前任务完成后保存设置。')
-            return
+            return False
         try:
-            self.store.set_sources([x.strip() for x in self.sources.toPlainText().splitlines() if x.strip()])
             endpoint = self.endpoint.text().strip()
             if endpoint:
                 from urllib.parse import urlparse
                 url = urlparse(endpoint)
                 if url.scheme not in ('http', 'https') or not url.hostname or url.username or url.password:
                     raise ValueError('模型服务地址必须是有效的 HTTP/HTTPS 地址，不能包含凭据')
+            self.store.set_sources([x.strip() for x in self.sources.toPlainText().splitlines() if x.strip()])
             for key, value in dict(claude_path=self.claude.text().strip(), model=self.model.text().strip(), endpoint=endpoint, mode=self.mode.currentData(), threshold=self.threshold.value(), auto_apply=self.auto.isChecked(), send_content=self.content.isChecked(), background=self.background.isChecked()).items():
                 self.store.set(key, value)
             self.worker.wake.set()
             self.refresh()
-            self.statusBar().showMessage('设置已保存')
+            self.statusBar().showMessage('设置已保存，监控运行中' if self.worker.monitoring else '设置已保存，点击「启动自动监控」开始扫描')
+            return True
         except Exception as exc:
             QMessageBox.warning(self, '配置无效', str(exc))
+            return False
+
+    def save_and_start(self):
+        self.auto.setChecked(True)
+        if self.save_settings():
+            self.start_monitoring()
 
     def check_claude(self):
         import subprocess
@@ -801,6 +831,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-dir')
     parser.add_argument('--smoke', action='store_true')
+    parser.add_argument('--start-monitoring', action='store_true', help='Start monitoring the saved source folders')
     args = parser.parse_args()
     app = QApplication(sys.argv[:1])
     app.setStyle('Fusion')
@@ -815,6 +846,8 @@ def main():
     initialize_local_model(store)
     win = Window(store)
     win.show()
+    if args.start_monitoring:
+        QTimer.singleShot(0, win.start_monitoring)
     if args.smoke:
         def screenshot():
             win.grab().save(str(home / 'preview.png'))
