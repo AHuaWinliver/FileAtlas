@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse
 import json
+from itertools import islice
 import os
 from pathlib import Path
 import shutil
@@ -23,9 +24,9 @@ from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QPainter, QPix
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QCheckBox, QDoubleSpinBox, QListWidget, QStackedWidget,
     QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, QHeaderView, QSplitter, QFormLayout,
-    QDialog, QDialogButtonBox, QFileDialog, QMessageBox, QFrame, QSystemTrayIcon, QMenu, QAbstractItemView, QGraphicsOpacityEffect, QSizeGrip, QScrollArea)
+    QDialog, QDialogButtonBox, QFileDialog, QMessageBox, QFrame, QSystemTrayIcon, QMenu, QAbstractItemView, QGraphicsOpacityEffect, QSizeGrip, QScrollArea, QProgressBar, QSizePolicy)
 from core import Store, Engine, extract, initialize_local_model
-from worker import Worker
+from worker import SortMode, Worker
 from cae import allowed_category
 from cae_ui import CAEDialog
 
@@ -51,6 +52,7 @@ QPushButton {background:rgba(255,255,255,190);border:1px solid #d4deeb;border-ra
 QPushButton:hover {background:#eaf1fa;border-color:#9bb5d5;}
 QPushButton#primary {background:#246fae;border-color:#246fae;color:white;font-weight:600;}
 QPushButton#primary:hover {background:#1b5b91;}
+QPushButton:disabled,QPushButton#primary:disabled {background:#eef2f7;border-color:#dce4ee;color:#8895a7;}
 QLineEdit,QTextEdit,QPlainTextEdit,QComboBox,QDoubleSpinBox {background:white;border:1px solid #d8e1ed;border-radius:6px;padding:8px;selection-background-color:#b9d9f5;}
 QTreeWidget,QTableWidget {background:rgba(255,255,255,200);border:1px solid rgba(220,230,243,190);border-radius:10px;alternate-background-color:rgba(241,246,253,160);outline:0;}
 QHeaderView::section {background:#f1f5fa;color:#687b94;border:0;border-bottom:1px solid #e2e8f1;padding:10px;font-weight:600;}
@@ -58,6 +60,8 @@ QTableWidget::item {padding:7px;}
 QTableWidget::item:selected,QTreeWidget::item:selected {background:#e0effc;color:#164e7c;}
 QSplitter::handle {background:transparent;width:10px;}
 QCheckBox {spacing:8px;padding:5px 0;}
+QProgressBar {background:rgba(190,209,231,150);border:0;border-radius:3px;}
+QProgressBar::chunk {background:#3689c6;border-radius:3px;}
 QStatusBar {background:rgba(242,246,253,180);color:#60728a;}
 QPushButton#caption {background:transparent;border:0;border-radius:6px;font-size:16px;padding:3px;min-width:38px;min-height:27px;}
 QPushButton#caption:hover {background:rgba(190,204,226,110);}
@@ -103,10 +107,42 @@ class PreviewTask(QRunnable):
 
     def run(self):
         try:
-            text = extract(self.path)[:5000] if self.path.is_file() else '文件已被外部移动或删除。'
+            if self.path.is_dir():
+                entries = list(islice(self.path.iterdir(), 41))
+                lines = ['整包归档 · 保留原目录结构', '']
+                lines.extend(('📁 ' if p.is_dir() else '· ') + p.name for p in entries[:40])
+                if len(entries) > 40:
+                    lines.append('更多内容可在资源管理器中查看。')
+                text = '\n'.join(lines)
+            else:
+                text = extract(self.path)[:5000] if self.path.is_file() else '项目已被外部移动或删除。'
         except Exception as exc:
             text = '无法预览：' + str(exc)
         self.signals.finished.emit(self.fid, text)
+
+
+class ClaudeCheckSignals(QObject):
+    finished = Signal(bool, str)
+
+
+class ClaudeCheckTask(QRunnable):
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        self.signals = ClaudeCheckSignals()
+
+    def run(self):
+        import subprocess
+        try:
+            if not self.path.is_file() or self.path.suffix.lower() != '.exe':
+                raise ValueError('请选择 claude.exe')
+            result = subprocess.run([str(self.path), '--version'], capture_output=True, text=True,
+                                    timeout=8, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            if result.returncode:
+                raise ValueError(result.stderr.strip() or f'程序退出码 {result.returncode}')
+            self.signals.finished.emit(True, result.stdout.strip())
+        except Exception as exc:
+            self.signals.finished.emit(False, str(exc))
 
 
 def button(text, fn, primary=False):
@@ -123,6 +159,58 @@ def label(text, name=None):
         w.setObjectName(name)
     w.setWordWrap(True)
     return w
+
+
+class ProgressLine(QWidget):
+    def __init__(self, *, persistent=False):
+        super().__init__()
+        box = QVBoxLayout(self)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(5)
+        row = QHBoxLayout()
+        self.caption = label('', 'muted')
+        self.caption.setWordWrap(False)
+        self.caption.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        row.addWidget(self.caption, 1)
+        self.count = label('', 'muted')
+        self.count.setWordWrap(False)
+        row.addWidget(self.count)
+        box.addLayout(row)
+        self.bar = QProgressBar()
+        self.bar.setFixedHeight(6)
+        self.bar.setTextVisible(False)
+        box.addWidget(self.bar)
+        self.reveal = QTimer(self, singleShot=True, interval=180)
+        self.reveal.timeout.connect(self.show)
+        self.dismiss = QTimer(self, singleShot=True, interval=650)
+        self.dismiss.timeout.connect(self.hide)
+        if not persistent:
+            self.hide()
+
+    def update_progress(self, message='', done=0, total=0, *, idle=False):
+        self.dismiss.stop()
+        if not message:
+            self.reveal.stop()
+            if not self.isHidden() and self.bar.maximum() > 0 and self.bar.value() == self.bar.maximum():
+                self.dismiss.start()
+            else:
+                self.hide()
+            return
+        self.caption.setText(message)
+        self.caption.setToolTip(message)
+        self.count.setText(f'{done}/{total}' if total else '')
+        self.bar.setAccessibleName(message)
+        self.bar.setRange(0, total or int(idle))
+        if total or idle:
+            self.bar.setValue(done)
+        if self.isHidden() and not self.reveal.isActive():
+            self.reveal.start()
+
+    def show_idle(self, message, *, keep_value=False):
+        if keep_value and self.count.text():
+            self.update_progress(message, self.bar.value(), self.bar.maximum(), idle=True)
+        else:
+            self.update_progress(message, idle=True)
 
 
 def icon():
@@ -162,7 +250,7 @@ class CategoryDialog(QDialog):
         row.addWidget(self.destination)
         row.addWidget(button('浏览', self.browse))
         self.description = QPlainTextEdit((category or {}).get('description', ''))
-        self.description.setPlaceholderText('填写分类依据。可另起一行填写扩展名规则，例如「扩展名规则：.pdf .docx」。')
+        self.description.setPlaceholderText('填写分类依据。可另起一行写「扩展名规则：.pdf .docx」或「文件夹规则：项目交付包 | 试验资料包」。')
         form.addRow('分类名称', self.name)
         form.addRow('父级分类', self.parent_box)
         form.addRow('保存地址', row)
@@ -182,7 +270,6 @@ class CategoryDialog(QDialog):
     def save(self):
         try:
             self.store.save_category(self.name.text(), self.destination.text(), self.description.toPlainText(), self.parent_box.currentData(), (self.category or {}).get('id'))
-            self.store.export_tree()
             self.accept()
         except Exception as exc:
             QMessageBox.warning(self, '无法保存', str(exc))
@@ -194,6 +281,7 @@ class Window(QMainWindow):
         self.store = store
         self.engine = Engine(store)
         self.worker = Worker(self.engine)
+        self.preview_requests = {}
         self.refresh_timer = QTimer(self)
         self.refresh_timer.setSingleShot(True)
         self.refresh_timer.setInterval(250)
@@ -236,9 +324,17 @@ class Window(QMainWindow):
         heading.addWidget(self.heading)
         heading.addStretch()
         self.watch_btn = button('启动自动监控', self.toggle_watch, True)
-        heading.addWidget(button('扫描源文件夹', self.scan))
+        self.scan_btn = button('扫描源文件夹', self.scan)
+        heading.addWidget(self.scan_btn)
         heading.addWidget(self.watch_btn)
         area.addLayout(heading)
+        self.global_progress_area = QWidget()
+        progress_layout = QVBoxLayout(self.global_progress_area)
+        progress_layout.setContentsMargins(0, 0, 0, 0)
+        self.task_progress = ProgressLine()
+        progress_layout.addWidget(self.task_progress)
+        area.addWidget(self.global_progress_area)
+        self.worker.progress.connect(self.task_progress.update_progress)
         area.addSpacing(12)
         self.stack = QStackedWidget()
         area.addWidget(self.stack)
@@ -249,6 +345,9 @@ class Window(QMainWindow):
         self.make_categories()
         self.make_settings()
         self.make_history()
+        self.worker.sorting_state_changed.connect(self.update_sorting_controls)
+        self.worker.sorting_progress.connect(self.show_sorting_progress)
+        self.update_sorting_controls()
         self.nav.currentRowChanged.connect(self.navigate)
         self.nav.setCurrentRow(0)
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
@@ -316,6 +415,8 @@ class Window(QMainWindow):
 
     def navigate(self, i):
         self.stack.setCurrentIndex(i)
+        self.watch_btn.setVisible(i != 0)
+        self.global_progress_area.setVisible(i != 0)
         self.heading.setText(['工作台', '文件资料库', '待审核', '分类与目录', '自动化设置', '整理记录'][i])
         self.refresh()
         effect = QGraphicsOpacityEffect(self.stack.currentWidget())
@@ -331,7 +432,7 @@ class Window(QMainWindow):
         box = self.page()
         metrics = QHBoxLayout()
         self.metrics = []
-        for text in ['已索引文件', '已完成整理', '等待审核', '分类节点']:
+        for text in ['已索引条目', '已完成整理', '等待审核', '分类节点']:
             card = QFrame()
             card.setObjectName('card')
             b = QVBoxLayout(card)
@@ -346,9 +447,24 @@ class Window(QMainWindow):
         card.setObjectName('card')
         b = QVBoxLayout(card)
         b.setContentsMargins(24, 24, 24, 24)
-        b.addWidget(label('从杂乱的收件箱，到清晰的文件地图', 'title'))
-        b.addWidget(label('监控源文件夹 → 等待写入稳定 → Claude Code 识别并打标签 → 审核或自动归档 → 更新目录'))
-        b.addSpacing(10)
+        header = QHBoxLayout()
+        header.addWidget(label('整理任务', 'title'))
+        header.addStretch()
+        self.sort_state = label('', 'muted')
+        header.addWidget(self.sort_state)
+        b.addLayout(header)
+        self.dashboard_progress = ProgressLine(persistent=True)
+        b.addWidget(self.dashboard_progress)
+        controls = QHBoxLayout()
+        self.sort_start_btn = button('启动整理', self.start_monitoring, True)
+        self.sort_pause_btn = button('暂停整理', self.pause_sorting)
+        self.sort_stop_btn = button('停止整理', self.stop_sorting)
+        self.sort_pause_btn.setToolTip('当前文件处理完成后暂停，可继续整理。')
+        self.sort_stop_btn.setToolTip('当前文件处理完成后结束本轮整理，下次启动时重新扫描。')
+        for control in (self.sort_start_btn, self.sort_pause_btn, self.sort_stop_btn):
+            controls.addWidget(control)
+        controls.addStretch()
+        b.addLayout(controls)
         self.summary = label('')
         b.addWidget(self.summary)
         row = QHBoxLayout()
@@ -358,7 +474,11 @@ class Window(QMainWindow):
         row.addStretch()
         b.addLayout(row)
         box.addWidget(card)
-        box.addWidget(label('最近动态', 'title'))
+        activity_header = QHBoxLayout()
+        activity_header.addWidget(label('最近动态', 'title'))
+        activity_header.addStretch()
+        activity_header.addWidget(button('清空动态', self.clear_events))
+        box.addLayout(activity_header)
         self.activity = QPlainTextEdit()
         self.activity.setReadOnly(True)
         box.addWidget(self.activity)
@@ -380,11 +500,18 @@ class Window(QMainWindow):
         preview = QPlainTextEdit()
         preview.setReadOnly(True)
         preview.setPlaceholderText('选择文件查看分类依据、完整路径与内容摘录。双击可在资源管理器定位。')
-        split.addWidget(preview)
+        preview_panel = QWidget()
+        preview_box = QVBoxLayout(preview_panel)
+        preview_box.setContentsMargins(0, 0, 0, 0)
+        preview_progress = ProgressLine()
+        preview_box.addWidget(preview_progress)
+        preview_box.addWidget(preview)
+        split.addWidget(preview_panel)
         split.setSizes([450, 180])
         box.addWidget(split)
         actions = QHBoxLayout()
         actions.addWidget(button('在资源管理器中定位', lambda: self.open_selected(review)))
+        actions.addWidget(button('清空预览', lambda: self.clear_preview(review)))
         if review:
             combo = QComboBox()
             combo.setMinimumWidth(240)
@@ -398,8 +525,10 @@ class Window(QMainWindow):
         box.addLayout(actions)
         if review:
             self.review_table, self.review_search, self.review_preview = table, search, preview
+            self.review_preview_progress = preview_progress
         else:
             self.file_table, self.file_search, self.file_preview = table, search, preview
+            self.file_preview_progress = preview_progress
 
     def table(self, headers):
         table = QTableWidget(0, len(headers))
@@ -486,19 +615,26 @@ class Window(QMainWindow):
         self.content = QCheckBox('提取 TXT / Markdown / CSV / PDF / DOCX 等文件的内容摘录（最多 12,000 字符）')
         self.content.setChecked(self.store.get('send_content', True))
         form.addRow('内容识别', self.content)
+        self.folder_first = QCheckBox('先判断整包，混合目录再逐层下钻')
+        self.folder_first.setChecked(self.store.get('folder_first', True))
+        form.addRow('文件夹优先', self.folder_first)
         self.background = QCheckBox('关闭窗口后继续在托盘监控（使用托盘菜单退出）')
         self.background.setChecked(self.store.get('background', True))
         form.addRow('后台运行', self.background)
         box.addLayout(form)
         box.addWidget(label('Claude Code 在本机启动，模型请求会使用它当前配置的服务与凭据。文件名、路径及启用后的内容摘录会发送给该服务。图片、扫描 PDF、旧版 Office、压缩包当前按名称和元数据识别。', 'muted'))
+        box.addWidget(label('整包判断使用文件夹名称和浅层相对名称。按一个项目记录标签、进度和撤销，目录内部结构原样保留。', 'muted'))
         box.addWidget(label('文件先等待至少 3 秒稳定；同名文件保留双方；目标目录从源监控中排除；失败记录写入“整理记录”。', 'muted'))
         row = QHBoxLayout()
         row.addWidget(button('保存设置', self.save_settings, True))
         row.addWidget(button('保存并启动自动整理', self.save_and_start))
-        row.addWidget(button('检测 Claude Code', self.check_claude))
+        self.claude_check_btn = button('检测 Claude Code', self.check_claude)
+        row.addWidget(self.claude_check_btn)
         row.addWidget(button('打开应用数据目录', lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.store.home)))))
         row.addStretch()
         box.addLayout(row)
+        self.claude_check_progress = ProgressLine()
+        box.addWidget(self.claude_check_progress)
         box.addStretch()
 
     def make_history(self):
@@ -510,6 +646,11 @@ class Window(QMainWindow):
         box.addLayout(row)
         self.history = self.table(['原文件', '目标路径', '方式', '状态', '时间', '异常说明'])
         box.addWidget(self.history)
+        log_header = QHBoxLayout()
+        log_header.addWidget(label('活动日志', 'muted'))
+        log_header.addStretch()
+        log_header.addWidget(button('清空日志', self.clear_events))
+        box.addLayout(log_header)
         self.logs = QPlainTextEdit()
         self.logs.setReadOnly(True)
         self.logs.setMaximumHeight(200)
@@ -519,6 +660,21 @@ class Window(QMainWindow):
         row = table.currentRow()
         item = table.item(row, 0)
         return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+    def clear_events(self):
+        latest = self.store.rows('SELECT COALESCE(MAX(id), 0) AS id FROM events')[0]['id']
+        self.store.set('events_visible_after', latest)
+        self.refresh_events()
+
+    def refresh_events(self):
+        cutoff = self.store.get('events_visible_after', 0)
+        events = self.store.rows('SELECT * FROM events WHERE id > ? ORDER BY id DESC LIMIT 60', (cutoff,))
+        logs = '\n'.join(f"{x['created']}  [{x['level']}]  {x['message']}" for x in events)
+        self.activity.setPlaceholderText('日志已清空，新的动态将在这里显示。' if cutoff else '还没有整理记录。设置分类与整理源后，点击“扫描源文件夹”开始。')
+        self.logs.setPlaceholderText('日志已清空，新的记录将在这里显示。' if cutoff else '暂无活动日志。')
+        for view in (self.activity, self.logs):
+            if view.toPlainText() != logs:
+                view.setPlainText(logs)
 
     def refresh(self):
         if getattr(self, 'template_pending', False) and not self.worker.busy:
@@ -530,10 +686,7 @@ class Window(QMainWindow):
         for w, v in zip(self.metrics, [sum(c.values()), c.get('done', 0), c.get('review', 0), len(cats)]):
             w.setText(str(v))
         self.summary.setText(f"整理源 {len(self.store.get('sources', []))} 个  ·  分类 {len(cats)} 个  ·  {'自动归档已开启' if self.store.get('auto_apply', False) else '分类后等待审核'}  ·  {'移动模式' if self.store.get('mode', 'copy') == 'move' else '复制模式'}")
-        events = self.store.rows('SELECT * FROM events ORDER BY id DESC LIMIT 60')
-        logs = '\n'.join(f"{x['created']}  [{x['level']}]  {x['message']}" for x in events)
-        self.activity.setPlainText(logs or '还没有整理记录。设置分类与整理源后，点击“扫描源文件夹”开始。')
-        self.logs.setPlainText(logs)
+        self.refresh_events()
         self.refresh_files()
         selected = self.review_combo.currentData()
         self.review_combo.clear()
@@ -555,7 +708,10 @@ class Window(QMainWindow):
                     walk(cat['id'], node)
                     entries = self.store.rows("SELECT * FROM files WHERE category=? AND status IN ('done','indexed') ORDER BY path LIMIT 201", (cat['id'],))
                     for f in entries[:200]:
-                        child = QTreeWidgetItem([Path(f['path']).name, f['path'], ' · '.join(json.loads(f['tags']))])
+                        name = Path(f['path']).name
+                        if f['kind'] == 'folder':
+                            name = '📦 ' + name + '（整包）'
+                        child = QTreeWidgetItem([name, f['path'], ' · '.join(json.loads(f['tags']))])
                         node.addChild(child)
                     if len(entries) > 200:
                         node.addChild(QTreeWidgetItem(['更多文件请在资料库中搜索', '', '']))
@@ -598,7 +754,8 @@ class Window(QMainWindow):
             rows = []
             for f in files:
                 cat = self.store.category_name(f['category']) or '未匹配分类'
-                rows.append((f['id'], [Path(f['path']).name, cat, ' · '.join(json.loads(f['tags'])), f"{f['confidence']:.0%}" if f['status'] != 'indexed' else '位置索引', {'review':'待审核','done':'已整理','undone':'已撤销','indexed':'原有文件','missing':'文件已移走','superseded':'已有新版本','protected':'工况文件受保护'}.get(f['status'], f['status']), f['updated']]))
+                name = Path(f['path']).name + ('（整包）' if f['kind'] == 'folder' else '')
+                rows.append((f['id'], [name, cat, ' · '.join(json.loads(f['tags'])), f"{f['confidence']:.0%}" if f['status'] != 'indexed' else '位置索引', {'review':'待审核','done':'已整理','undone':'已撤销','indexed':'原有文件','missing':'项目已移走','superseded':'已有新版本','protected':'工况受保护'}.get(f['status'], f['status']), f['updated']]))
             self.fill(table, rows)
 
     def file(self, review):
@@ -608,24 +765,47 @@ class Window(QMainWindow):
 
     def preview(self, review):
         f = self.file(review)
+        target = self.review_preview if review else self.file_preview
+        progress = self.review_preview_progress if review else self.file_preview_progress
+        self.preview_requests.pop(review, None)
         if f:
             p = Path(f['path'])
             text = f"路径：{p}\n源路径：{f['source']}\n分类依据：{f['reason']}\n标签：{' / '.join(json.loads(f['tags']))}\n\n"
-            target = self.review_preview if review else self.file_preview
             target.setPlainText(text + '正在读取预览…')
+            progress.update_progress('正在读取文件预览')
+            request = object()
+            self.preview_requests[review] = request
             task = PreviewTask(f['id'], p)
+
             def ready(fid, content):
-                selected = self.file(review)
-                if selected and selected['id'] == fid:
+                if self.preview_requests.get(review) is not request:
+                    return
+                self.preview_requests.pop(review)
+                progress.update_progress()
+                table = self.review_table if review else self.file_table
+                if self.selected(table) == fid:
                     target.setPlainText(text + content)
+                else:
+                    target.clear()
             task.signals.finished.connect(ready)
             QThreadPool.globalInstance().start(task)
+        else:
+            target.clear()
+            progress.update_progress()
+
+    def clear_preview(self, review):
+        table = self.review_table if review else self.file_table
+        table.selectionModel().clear()
+        self.preview(review)
 
     def open_selected(self, review):
         f = self.file(review)
         if f:
-            import subprocess
-            subprocess.Popen(['explorer.exe', '/select,', f['path']])
+            if f['kind'] == 'folder':
+                QDesktopServices.openUrl(QUrl.fromLocalFile(f['path']))
+            else:
+                import subprocess
+                subprocess.Popen(['explorer.exe', '/select,', f['path']])
 
     def ready_to_scan(self):
         sources = self.store.get('sources', [])
@@ -642,28 +822,77 @@ class Window(QMainWindow):
     def scan(self):
         if not self.ready_to_scan():
             return
+        if not self.worker.sorting_status()[0].active:
+            self.dashboard_progress.update_progress('正在准备扫描整理源')
         self.worker.request_scan()
-        self.statusBar().showMessage('正在扫描，等待文件写入稳定后开始分析…')
+        self.statusBar().showMessage('正在扫描，等待整理项写入稳定后开始分析…')
 
-    def start_monitoring(self):
-        if self.worker.monitoring or not self.ready_to_scan():
+    def update_sorting_controls(self):
+        mode, paused, working = self.worker.sorting_status()
+        stopped = not mode.active
+        running = not stopped and not paused
+        self.sort_start_btn.setEnabled((paused or stopped) and not working)
+        self.sort_start_btn.setText('继续整理' if paused else '启动整理')
+        self.sort_pause_btn.setEnabled(running)
+        self.sort_stop_btn.setEnabled(not stopped)
+        self.scan_btn.setEnabled(not paused and not (stopped and working))
+        self.watch_btn.setEnabled(not ((paused or stopped) and working))
+        self.watch_btn.setText('继续自动整理' if paused else '暂停自动整理' if running else '启动自动监控')
+        if stopped:
+            if mode == SortMode.MANUAL_DONE:
+                self.sort_state.setText('单次扫描结束')
+                self.dashboard_progress.show_idle('点击「启动整理」扫描并监控整理源', keep_value=True)
+            elif working:
+                self.sort_state.setText('正在停止')
+            else:
+                self.sort_state.setText('已停止')
+                self.dashboard_progress.show_idle('点击「启动整理」扫描并监控整理源')
+        elif paused:
+            self.sort_state.setText('正在暂停' if working else '已暂停')
+            if not working:
+                self.dashboard_progress.show_idle('点击「继续整理」处理剩余文件', keep_value=True)
+        else:
+            self.sort_state.setText('自动整理中' if mode == SortMode.MONITORING else '扫描整理中')
+
+    def show_sorting_progress(self, message, done, total):
+        mode, paused, working = self.worker.sorting_status()
+        if mode == SortMode.MANUAL_DONE:
+            if total:
+                self.dashboard_progress.update_progress('单次扫描结束', done, total, idle=True)
+        elif paused and not working:
+            if total and done:
+                self.dashboard_progress.update_progress('点击「继续整理」处理剩余文件', done, total, idle=True)
+        elif mode.active or working:
+            if message:
+                self.dashboard_progress.update_progress(message, done, total)
+            elif not paused:
+                self.dashboard_progress.show_idle('正在监控整理源 · 等待新文件', keep_value=True)
+
+    def start_monitoring(self, *, continuous=False):
+        mode, paused, _ = self.worker.sorting_status()
+        if (mode == SortMode.MONITORING and not paused) or not self.ready_to_scan():
             return
-        self.worker.monitoring = True
-        self.watch_btn.setText('暂停自动监控')
-        message = '开始扫描现有文件，符合条件时自动归档' if self.store.get('auto_apply', False) else '开始扫描现有文件，分类结果进入待审核'
+        self.dashboard_progress.update_progress('正在准备扫描整理源')
+        self.worker.start_sorting(continuous=continuous)
+        message = '继续整理，检查尚未处理的文件' if paused else '开始扫描现有文件，符合条件时自动归档' if self.store.get('auto_apply', False) else '开始扫描现有文件，分类结果进入待审核'
         self.store.event('监控', message)
         self.statusBar().showMessage(message)
-        self.worker.wake.set()
-        self.refresh()
+        self.refresh_events()
 
     def toggle_watch(self):
-        if not self.worker.monitoring:
+        mode, paused, _ = self.worker.sorting_status()
+        if not mode.active or paused:
             self.start_monitoring()
-            return
-        self.worker.monitoring = False
-        self.worker.wake.set()
-        self.watch_btn.setText('启动自动监控')
-        self.statusBar().showMessage('已暂停；当前任务完成后停止扫描')
+        else:
+            self.pause_sorting()
+
+    def pause_sorting(self):
+        self.worker.pause_sorting()
+        self.statusBar().showMessage('暂停整理 · 当前文件安全处理完成后暂停' if self.worker.sorting_status()[2] else '整理已暂停')
+
+    def stop_sorting(self):
+        self.worker.stop_sorting()
+        self.statusBar().showMessage('停止整理 · 当前文件安全处理完成后停止' if self.worker.sorting_status()[2] else '整理已停止')
 
     def apply_selected(self):
         f = self.file(True)
@@ -671,11 +900,16 @@ class Window(QMainWindow):
             self.worker.enqueue('apply', f['id'], self.review_combo.currentData())
 
     def reanalyze(self):
+        if self.worker.sorting_status()[1]:
+            QMessageBox.information(self, '整理已暂停', '请先继续整理，再重新分析。')
+            return
         if self.worker.busy:
             QMessageBox.information(self, '正在处理', '请等待当前任务完成。')
             return
         f = self.file(True)
         if f:
+            if f['kind'] == 'folder':
+                self.store.run('DELETE FROM folder_decisions WHERE path=?', (f['source'],))
             self.store.run("DELETE FROM files WHERE id=? AND status='review'", (f['id'],))
             self.worker.request_scan()
             self.refresh()
@@ -688,7 +922,7 @@ class Window(QMainWindow):
         text, ok = QInputDialog.getText(self, '编辑标签', '以逗号分隔：', text=', '.join(json.loads(f['tags'])))
         if ok:
             self.store.run('UPDATE files SET tags=? WHERE id=?', (json.dumps(list(dict.fromkeys(t.strip()[:40] for t in text.replace('，', ',').split(',') if t.strip()))[:20], ensure_ascii=False), f['id']))
-            self.store.export_tree()
+            self.worker.enqueue('export_tree')
             self.refresh()
 
     def category(self):
@@ -698,6 +932,7 @@ class Window(QMainWindow):
 
     def add_category(self):
         if CategoryDialog(self.store, parent=self).exec():
+            self.worker.enqueue('export_tree')
             self.refresh()
 
     def cae_template(self, project):
@@ -710,8 +945,7 @@ class Window(QMainWindow):
         dialog = CAEDialog(self.store, project, self)
         if dialog.exec() and dialog.arguments:
             self.template_pending = True
-            self.worker.monitoring = False
-            self.watch_btn.setText('启动自动监控')
+            self.worker.stop_sorting()
             self.worker.enqueue('create_cae_project' if project else 'setup_cae_workspace', *dialog.arguments)
             self.statusBar().showMessage('正在创建 CAE 分类与目录，完成后可刷新并查看…')
 
@@ -723,6 +957,7 @@ class Window(QMainWindow):
     def edit_category(self):
         c = self.category()
         if c and CategoryDialog(self.store, c, self).exec():
+            self.worker.enqueue('export_tree')
             self.refresh()
 
     def delete_category(self):
@@ -730,7 +965,7 @@ class Window(QMainWindow):
         if c:
             try:
                 self.store.delete_category(c['id'])
-                self.store.export_tree()
+                self.worker.enqueue('export_tree')
                 self.refresh()
             except Exception as exc:
                 QMessageBox.warning(self, '无法删除', str(exc))
@@ -743,11 +978,8 @@ class Window(QMainWindow):
     def export_tree(self):
         path, _ = QFileDialog.getSaveFileName(self, '导出文件目录', '文件目录.md', 'Markdown (*.md)')
         if path:
-            try:
-                self.store.export_tree(path)
-                self.statusBar().showMessage('目录已导出：' + path)
-            except Exception as exc:
-                QMessageBox.warning(self, '导出失败', str(exc))
+            self.worker.enqueue('export_tree', path)
+            self.statusBar().showMessage('目录导出已加入任务队列')
 
     def browse_source(self):
         path = QFileDialog.getExistingDirectory(self, '选择默认整理源文件夹')
@@ -771,11 +1003,12 @@ class Window(QMainWindow):
                 if url.scheme not in ('http', 'https') or not url.hostname or url.username or url.password:
                     raise ValueError('模型服务地址必须是有效的 HTTP/HTTPS 地址，不能包含凭据')
             self.store.set_sources([x.strip() for x in self.sources.toPlainText().splitlines() if x.strip()])
-            for key, value in dict(claude_path=self.claude.text().strip(), model=self.model.text().strip(), endpoint=endpoint, mode=self.mode.currentData(), threshold=self.threshold.value(), auto_apply=self.auto.isChecked(), send_content=self.content.isChecked(), background=self.background.isChecked()).items():
+            for key, value in dict(claude_path=self.claude.text().strip(), model=self.model.text().strip(), endpoint=endpoint, mode=self.mode.currentData(), threshold=self.threshold.value(), auto_apply=self.auto.isChecked(), send_content=self.content.isChecked(), folder_first=self.folder_first.isChecked(), background=self.background.isChecked()).items():
                 self.store.set(key, value)
             self.worker.wake.set()
             self.refresh()
-            self.statusBar().showMessage('设置已保存，监控运行中' if self.worker.monitoring else '设置已保存，点击「启动自动监控」开始扫描')
+            mode, paused, _ = self.worker.sorting_status()
+            self.statusBar().showMessage('设置已保存，监控运行中' if mode == SortMode.MONITORING and not paused else '设置已保存，可在工作台控制整理')
             return True
         except Exception as exc:
             QMessageBox.warning(self, '配置无效', str(exc))
@@ -784,20 +1017,22 @@ class Window(QMainWindow):
     def save_and_start(self):
         self.auto.setChecked(True)
         if self.save_settings():
-            self.start_monitoring()
+            self.start_monitoring(continuous=True)
 
     def check_claude(self):
-        import subprocess
-        try:
-            path = Path(self.claude.text())
-            if not path.is_file() or path.suffix.lower() != '.exe':
-                raise ValueError('请选择 claude.exe')
-            r = subprocess.run([str(path), '--version'], capture_output=True, text=True, timeout=8, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-            if r.returncode:
-                raise ValueError(r.stderr)
-            QMessageBox.information(self, 'Claude Code 已找到', r.stdout.strip() + '\n\n此检测确认程序可执行；模型连接与登录状态会在实际分类时验证。')
-        except Exception as exc:
-            QMessageBox.warning(self, '检测失败', str(exc))
+        self.claude_check_btn.setEnabled(False)
+        self.claude_check_progress.update_progress('正在检测 Claude Code')
+        task = ClaudeCheckTask(Path(self.claude.text()))
+        task.signals.finished.connect(self.claude_checked)
+        QThreadPool.globalInstance().start(task)
+
+    def claude_checked(self, ok, message):
+        self.claude_check_progress.update_progress()
+        self.claude_check_btn.setEnabled(True)
+        if ok:
+            QMessageBox.information(self, 'Claude Code 已找到', message + '\n\n此检测确认程序可执行；模型连接与登录状态会在实际分类时验证。')
+        else:
+            QMessageBox.warning(self, '检测失败', message)
 
     def undo(self):
         oid = self.selected(self.history)
@@ -805,9 +1040,8 @@ class Window(QMainWindow):
             self.worker.enqueue('undo', oid)
 
     def quit_app(self):
-        if self.worker.busy:
-            self.worker.monitoring = False
-            self.watch_btn.setText('启动自动监控')
+        self.worker.stop_sorting()
+        if self.worker.has_pending_work():
             QMessageBox.information(self, '等待当前任务', '已停止后续监控。当前分类或文件操作完成后，可再次退出。')
             return
         self.worker.requestInterruption()

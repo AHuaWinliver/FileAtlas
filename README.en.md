@@ -12,7 +12,7 @@
   </p>
 </div>
 
-FileAtlas is a desktop file organizer for Windows 11. Configure your categories, destination folders, and source folders, and it will call your local Claude Code installation when files change, suggest categories and tags, and copy or move files according to your settings.
+FileAtlas is a desktop file organizer for Windows 11. Give each category a destination, then select the source folders that receive new material. FileAtlas checks whether folders belong together, suggests categories and tags for loose files, and copies, moves, or queues items for review according to your settings.
 
 The interface uses a system Acrylic backdrop, a light sidebar, rounded panels, and short transitions. Directory scans, AI classification, file operations, and content previews run in the background.
 
@@ -22,33 +22,65 @@ The application interface is currently in Simplified Chinese. This README provid
 
 ## Features
 
-**New in 0.2.0: CAE workspace and project templates.** Preview the directory layout, create project stages and a baseline case, configure destinations, require review for ambiguous project IDs, and preserve native solver files and detected case companions. See the [CAE workflow](docs/CAE_WORKFLOW.md) and [quick start](docs/QUICK_START.md) (Chinese).
+**v0.3.0 adds folder-first filing.** An engineering delivery can be filed as one item with its models, drawings, reports, and empty directories intact. The dashboard can start, pause, resume, or stop filing and shows the progress of each pass. [Changelog](CHANGELOG.md)
 
 | Feature | Description |
 | --- | --- |
 | Hierarchical categories | Create parent and child categories, each with its own destination and classification guidance |
 | Existing folder import | Generate categories from an existing folder structure and index its files |
-| Automatic tagging | Claude Code generates tags from filenames, paths, and optional content excerpts |
-| Folder monitoring | Recursively monitor multiple source folders and queue files after they stabilize |
+| Folder-first filing | Evaluate parent folders first and descend when their scope is unclear. An intact folder appears as one entry in the library and catalog |
+| Automatic tagging | Direct rules can classify without a model call. Claude Code can use file metadata and optional excerpts |
+| Dashboard controls | Start, pause, resume, stop, or run a one-time scan. See the current stage and processed/total count |
 | Automatic filing | File high-confidence results automatically and send other results to review |
 | File catalog | Update a logical category tree and export the complete catalog as Markdown |
 | Operation history | Record source paths, destinations, and operation status, with verified undo |
 | Search | Find files by filename, path, category, or tags |
+| CAE templates | Preview workspaces, project stages, and baseline cases with project ID review and solver file protection |
 
 ## Quick start
 
 ### Windows portable application
 
-Download `FileAtlas-0.2.1-win64.zip`, extract it, and run `FileAtlas.exe`. Keep the `_internal` folder alongside the executable. [GitHub Releases](https://github.com/AHuaWinliver/FileAtlas/releases)
+Download published Windows installers and portable packages from GitHub Releases. For a portable package, extract it, run `FileAtlas.exe`, and keep the `_internal` folder alongside it. Get v0.3.0 from the source tag and follow the run or build instructions below. [Windows downloads](https://github.com/AHuaWinliver/FileAtlas/releases) · [Source tags](https://github.com/AHuaWinliver/FileAtlas/tags)
 
-1. Open **Categories & Catalog** (`分类与目录`). Create categories and set their destinations and classification guidance, or import an existing folder structure.
-2. Open **Automation Settings** (`自动化设置`). Select your source folders, check the `claude.exe` path, and save.
-3. Click **Scan Source Folders** (`扫描源文件夹`), then check the suggestions in **Review** (`待审核`).
-4. Once the results meet your needs, choose copy or move mode and click **Save and Start Automatic Filing** (`保存并启动自动整理`).
-
-To file by type, add `扩展名规则：.pdf .docx` on its own line in the category guidance. A single matching category receives the file and an extension tag. With zero or multiple matches, FileAtlas uses model classification.
+1. In **Categories & Catalog** (`分类与目录`), create categories with destinations and classification guidance. You can also import an existing folder structure.
+2. In **Automation Settings** (`自动化设置`), add your source folders. For model classification, configure `claude.exe` and optionally override the model or service URL.
+3. Click **Scan Source Folders** (`扫描源文件夹`) on the dashboard for a one-time scan. In **Review** (`待审核`), confirm suggestions or choose a category.
+4. Click **Start Filing** (`启动整理`) to keep monitoring the sources. Enable automatic execution in Settings to file eligible high-confidence results, or click **Save and Start Automatic Filing** (`保存并启动自动整理`).
 
 The initial defaults use copy mode and require manual review. Closing the window can leave the application running in the system tray; right-click its tray icon to exit. Monitoring must be started again after restarting the application.
+
+### Folder rule example
+
+Put the following material into a source folder and set the Engineering Deliveries category destination to `D:\Archive\Engineering Deliveries`.
+
+```text
+Inbox/
+├── Gearbox Test Delivery/
+│   ├── 01_Models/assembly.step
+│   ├── 02_Reports/test-summary.pdf
+│   └── 03_Photos/test-rig.png
+└── purchase-contract.pdf
+```
+
+Add `文件夹规则：Gearbox Test Delivery | Drive Test Package` on its own line in the category guidance. The rule matches full folder names. Separate aliases with `|`. Filing creates `D:\Archive\Engineering Deliveries\Gearbox Test Delivery` and preserves its contents and structure as one item. The loose purchase contract is classified separately. For a file type rule, add `扩展名规则：.pdf .docx` to the relevant category. A unique match assigns the category and extension tag directly.
+
+| Folder situation | Result |
+| --- | --- |
+| Full name matches a unique folder rule | File it as one unit. An explicit conflicting rule for a nested folder causes FileAtlas to descend |
+| Folder name matches one eligible category | Consider it as a bundle. If the category has an extension rule, every file in the bundle must fit it |
+| Descriptive folder name with no direct match | Claude Code evaluates the folder name, parent name, and a limited sample of shallow relative names. A clear, high-confidence match can keep the folder intact |
+| Generic folder name, mixed contents, or insufficient evidence | Inspect child folders and classify the remaining loose files individually |
+| Protected CAE case | Leave protected solver material and marked case directories in place |
+
+Model-selected bundles enter Review in move mode. Folder-first filing is enabled by default and can be switched off in Automation Settings. See the [CAE workflow](docs/CAE_WORKFLOW.md) for project IDs and case protection.
+
+### Dashboard and activity history
+
+- **Start Filing** (`启动整理`) scans the sources and keeps monitoring them. **Scan Source Folders** (`扫描源文件夹`) runs once.
+- **Pause Filing** (`暂停整理`) lets the current file or bundle finish safely. Click **Resume Filing** (`继续整理`) to continue. **Stop Filing** (`停止整理`) ends the pass. Starting again scans the sources afresh.
+- Progress is displayed as `processed/total`. An intact folder counts as one item. The dashboard also shows the current item or stage.
+- **Clear Activity** (`清空动态`) and **Clear Log** (`清空日志`) both start the activity views from the next new event. Operation history remains available for inspection and undo. File previews can be cleared separately.
 
 ### Run from source
 
@@ -64,17 +96,20 @@ python -m venv .venv
 
 ```mermaid
 flowchart LR
-    A[Source folders] --> B[File stability check]
-    B --> C[Metadata and optional content excerpts]
-    C --> D[Local Claude Code process]
-    D --> E{Validate category and confidence}
-    E -->|Automatic filing enabled and threshold met| F[Copy or move file]
+    A[Source folders] --> B{Evaluate parent folder}
+    B -->|Clear bundle scope| C[Check bundle and stability]
+    B -->|Unclear scope| D[Inspect child folders and loose files]
+    D --> B
+    D --> I[File rule or Claude Code]
+    C --> E{Validate category and filing conditions}
+    I --> E
+    E -->|Automatic filing enabled and conditions met| F[Copy or move item]
     E -->|Other results| G[Manual review]
     G --> F
     F --> H[Update tags, history, and catalog]
 ```
 
-The Claude Code process runs locally. Where the model runs depends on its configured service. With a cloud service, filenames, paths, and any enabled content excerpts are sent to that service. With a compatible local service, a local model handles the request. Content extraction can be disabled.
+The Claude Code process runs locally. The configured service determines where the model runs. For folder decisions, the request includes the folder name and a limited sample of shallow relative names. File decisions use names, path information, and optional content excerpts. A cloud configuration sends that information to the selected service. A compatible local configuration processes it locally.
 
 FileAtlas inherits Claude Code's authentication and model configuration. You can override the model and service URL within FileAtlas without changing global Claude settings. Classification calls disable tools, MCP, slash commands, and hooks. The AI returns a category ID and tags; FileAtlas performs the file operations.
 
@@ -83,6 +118,7 @@ Tags, settings, and logs are stored in `%LOCALAPPDATA%\FileAtlas`. Tags are kept
 ## File protection and current limits
 
 - Files with conflicting names are both retained. Copies are checked using SHA-256; move mode removes the source after verification.
+- Bundle verification also covers relative paths, empty directories, and file contents. If an archived bundle has changed, undo preserves the archived copy and reports the reason.
 - Undo verifies the destination first. Modified destination files, occupied original paths, and similar conditions block destructive operations.
 - Content excerpts are supported for text, PDF, and DOCX files. Images, scanned PDFs, legacy Office files, audio, video, and archives currently use filenames and metadata; OCR is not available.
 - Files must remain stable for at least three seconds. Files larger than 30 MB use metadata only.
@@ -120,6 +156,7 @@ FileAtlas/
 ├── scripts/            # Build and integration validation scripts
 ├── tests/              # Core file operation tests
 ├── app.py              # Desktop interface
+├── bundles.py          # Folder snapshots, verified copies, and safe bundle undo
 ├── core.py             # Classification, indexing, filing, and undo
 ├── worker.py           # Background monitoring and task processing
 └── FileAtlas.spec      # PyInstaller build configuration

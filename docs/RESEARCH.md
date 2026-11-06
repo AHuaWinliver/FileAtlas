@@ -12,3 +12,13 @@
 本项目针对“现有多级分类 + 独立目标路径 + Claude Code 语义判定 + 监控归档 + 实时目录”组合需求实现。当前版本没有宣称取代这些成熟产品的双栏操作、压缩、FTP、全文索引、插件生态或多年稳定性积累。
 
 Claude 集成依据：[Claude Code 非交互调用文档](https://code.claude.com/docs/en/headless)。启动参数以本机 `claude --help` 实际支持的选项核对。保留现有认证，不使用会忽略订阅登录的 bare 模式；通过工具列表和设置禁用本次分类不需要的执行能力。
+
+## 文件夹归属与整包策略
+
+| 参考 | FileAtlas 的实现 |
+|---|---|
+| [Hazel 子目录处理](https://www.noodlesoft.com/manual/hazel/advanced-topics/processing-subfolders/) | 目录规则先于递归处理，确定归属的目录作为整体。 |
+| [Archivematica 复合对象](https://www.archivematica.org/en/docs/archivematica-1.6/user-manual/access/contentdm/) | 关联材料共享同一个目录级条目，目录树保留包边界。 |
+| [SOLIDWORKS Pack and Go](https://help.solidworks.com/2024/English/SolidWorks/Sldworks/c_pack_and_go.htm) | 同一交付中的模型、图纸和报告可共属一个整体，保留包内相对路径。 |
+| [英国国家档案馆数字记录指南](https://cdn.nationalarchives.gov.uk/documents/information-management/managing-electronic-records-without-an-erms-publication-edition.pdf) | 目录名称提供归属语境，模糊容器继续向下检查。 |
+| [BagIt RFC 8493](https://datatracker.ietf.org/doc/html/rfc8493) | 借鉴相对路径与内容校验的思路，保留可直接打开的普通文件夹。 |

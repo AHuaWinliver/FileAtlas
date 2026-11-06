@@ -59,7 +59,9 @@ def project_plan(project_id, client, name, keywords=''):
     return entries
 
 
-def apply_plan(store, root, entries, project_id=None, parent=None, extra_settings=None):
+def apply_plan(store, root, entries, project_id=None, parent=None, extra_settings=None, *, progress=None):
+    if progress:
+        progress('正在检查 CAE 模板')
     if not Path(root).is_absolute():
         raise ValueError('工作空间必须使用绝对路径')
     root = Path(root).resolve()
@@ -86,7 +88,9 @@ def apply_plan(store, root, entries, project_id=None, parent=None, extra_setting
         planned.append((cid, expected_parent, dest.name, str(dest), description, old is not None))
         if old is None:
             policies[cid] = dict(allow_files=allowed, protected=protected, project_id=project_id)
-    for item in planned:
+    for done, item in enumerate(planned):
+        if progress:
+            progress('正在创建 CAE 目录 · ' + item[2], done, len(planned))
         Path(item[3]).mkdir(parents=True, exist_ok=True)
     with store.lock, store.db:
         for cid, pid, name, dest, description, exists in planned:
@@ -95,11 +99,14 @@ def apply_plan(store, root, entries, project_id=None, parent=None, extra_setting
         settings = dict(extra_settings or {}, category_policies=policies, cae_mode=True)
         for key, value in settings.items():
             store.db.execute('INSERT OR REPLACE INTO settings VALUES(?,?)', (key, json.dumps(value, ensure_ascii=False)))
-    store.export_tree()
+    if progress:
+        store.export_tree(progress=progress)
+    else:
+        store.export_tree()
     return ids
 
 
-def install_workspace(store, root):
+def install_workspace(store, root, *, progress=None):
     root = Path(root)
     if not root.is_absolute():
         raise ValueError('请选择工作空间的绝对路径')
@@ -122,7 +129,7 @@ def install_workspace(store, root):
     for child in ('下载与接收', '临时资料'):
         (inbox / child).mkdir(parents=True, exist_ok=True)
     ids = apply_plan(store, root, workspace_plan(root), extra_settings={
-        'cae_workspaces': workspaces + [str(root)], 'sources': sources})
+        'cae_workspaces': workspaces + [str(root)], 'sources': sources}, progress=progress)
     roots = store.get('cae_workspace_roots', {})
     roots[str(root)] = ids['01_项目库']
     store.set('cae_workspace_roots', roots)
@@ -130,7 +137,7 @@ def install_workspace(store, root):
     return ids
 
 
-def create_project(store, workspace, project_id, client, name, keywords=''):
+def create_project(store, workspace, project_id, client, name, keywords='', *, progress=None):
     workspace = str(Path(workspace).resolve())
     if workspace not in store.get('cae_workspaces', []):
         raise ValueError('请先初始化 CAE 工作空间')
@@ -145,7 +152,7 @@ def create_project(store, workspace, project_id, client, name, keywords=''):
     root, parent = Path(library['destination']), library['id']
     project = dict(id=project_id.strip(), client=client.strip(), name=name.strip(), workspace=workspace)
     ids = apply_plan(store, root, entries, project_id=project['id'], parent=parent,
-                     extra_settings={'cae_projects': projects + [project]})
+                     extra_settings={'cae_projects': projects + [project]}, progress=progress)
     store.event('CAE 项目', '已创建项目与基准工况：' + project['id'])
     return ids
 
