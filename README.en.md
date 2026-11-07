@@ -16,26 +16,11 @@ FileAtlas is a desktop file organizer for Windows 11. Give each category a desti
 
 The interface uses a system Acrylic backdrop, a light sidebar, rounded panels, and short transitions. Directory scans, AI classification, file operations, and content previews run in the background.
 
-![FileAtlas interface example](assets/screenshot.png)
+![FileAtlas dashboard showing progress, the current item, and start, pause, and stop controls](assets/readme/sorting-dashboard.png)
 
-The application interface is currently in Simplified Chinese. This README provides English instructions, with the actual Chinese menu labels included below.
+The **dashboard** shows the current item, recent activity, and progress. The `1/3` counter in the screenshot shows that one of three items has been processed. A loose file and a complete delivery folder each count as one item.
 
-## Features
-
-**v0.3.0 adds folder-first filing.** An engineering delivery can be filed as one item with its models, drawings, reports, and empty directories intact. The dashboard can start, pause, resume, or stop filing and shows the progress of each pass. [Changelog](CHANGELOG.md)
-
-| Feature | Description |
-| --- | --- |
-| Hierarchical categories | Create parent and child categories, each with its own destination and classification guidance |
-| Existing folder import | Generate categories from an existing folder structure and index its files |
-| Folder-first filing | Evaluate parent folders first and descend when their scope is unclear. An intact folder appears as one entry in the library and catalog |
-| Automatic tagging | Direct rules can classify without a model call. Claude Code can use file metadata and optional excerpts |
-| Dashboard controls | Start, pause, resume, stop, or run a one-time scan. See the current stage and processed/total count |
-| Automatic filing | File high-confidence results automatically and send other results to review |
-| File catalog | Update a logical category tree and export the complete catalog as Markdown |
-| Operation history | Record source paths, destinations, and operation status, with verified undo |
-| Search | Find files by filename, path, category, or tags |
-| CAE templates | Preview workspaces, project stages, and baseline cases with project ID review and solver file protection |
+The screenshots use demo data and a simulated model response for the commissioning notes. The app interface is in Simplified Chinese, and the English instructions include its exact control labels. [Changelog](CHANGELOG.md)
 
 ## Quick start
 
@@ -43,27 +28,25 @@ The application interface is currently in Simplified Chinese. This README provid
 
 Download published Windows installers and portable packages from GitHub Releases. For a portable package, extract it, run `FileAtlas.exe`, and keep the `_internal` folder alongside it. Get v0.3.0 from the source tag and follow the run or build instructions below. [Windows downloads](https://github.com/AHuaWinliver/FileAtlas/releases) · [Source tags](https://github.com/AHuaWinliver/FileAtlas/tags)
 
-1. In **Categories & Catalog** (`分类与目录`), create categories with destinations and classification guidance. You can also import an existing folder structure.
-2. In **Automation Settings** (`自动化设置`), add your source folders. For model classification, configure `claude.exe` and optionally override the model or service URL.
-3. Click **Scan Source Folders** (`扫描源文件夹`) on the dashboard for a one-time scan. In **Review** (`待审核`), confirm suggestions or choose a category.
-4. Click **Start Filing** (`启动整理`) to keep monitoring the sources. Enable automatic execution in Settings to file eligible high-confidence results, or click **Save and Start Automatic Filing** (`保存并启动自动整理`).
+## Illustrated walkthrough
 
-The initial defaults use copy mode and require manual review. Closing the window can leave the application running in the system tray; right-click its tray icon to exit. Monitoring must be started again after restarting the application.
+### 1. Set up categories and a folder rule
 
-### Folder rule example
+![Edit Category dialog showing the parent category, destination, and full folder name rule](assets/readme/folder-rule.png)
 
-Put the following material into a source folder and set the Engineering Deliveries category destination to `D:\Archive\Engineering Deliveries`.
+In **Categories & Catalog** (`分类与目录`), create Engineering Records → Test Deliveries (`工程资料 → 试验交付`). Give Test Deliveries its own destination, such as `D:\Archive\Test Deliveries`. Use **Generate Categories from Existing Folders** (`从现有目录生成分类`) to start from a folder structure you already use.
+
+Add `文件夹规则：齿轮箱台架交付 | 电驱试验资料包` to the category guidance. Each alias matches a full folder name. In the example below, the gearbox delivery folder keeps its original structure. The purchase contract can match a separate `扩展名规则：.txt` rule, and the commissioning notes can be sent to review.
 
 ```text
-Inbox/
-├── Gearbox Test Delivery/
-│   ├── 01_Models/assembly.step
-│   ├── 02_Reports/test-summary.pdf
-│   └── 03_Photos/test-rig.png
-└── purchase-contract.pdf
+收件箱/                              Inbox
+├── 齿轮箱台架交付/                  Gearbox test delivery
+│   ├── 01_模型/装配.step             Assembly model
+│   ├── 02_报告/试验结论.pdf           Test report
+│   └── 03_图片/台架.png              Test rig photo
+├── 01_采购合同.txt                  Purchase contract
+└── 02_台架调试纪要.md               Commissioning notes
 ```
-
-Add `文件夹规则：Gearbox Test Delivery | Drive Test Package` on its own line in the category guidance. The rule matches full folder names. Separate aliases with `|`. Filing creates `D:\Archive\Engineering Deliveries\Gearbox Test Delivery` and preserves its contents and structure as one item. The loose purchase contract is classified separately. For a file type rule, add `扩展名规则：.pdf .docx` to the relevant category. A unique match assigns the category and extension tag directly.
 
 | Folder situation | Result |
 | --- | --- |
@@ -73,16 +56,41 @@ Add `文件夹规则：Gearbox Test Delivery | Drive Test Package` on its own li
 | Generic folder name, mixed contents, or insufficient evidence | Inspect child folders and classify the remaining loose files individually |
 | Protected CAE case | Leave protected solver material and marked case directories in place |
 
-Model-selected bundles enter Review in move mode. Folder-first filing is enabled by default and can be switched off in Automation Settings. See the [CAE workflow](docs/CAE_WORKFLOW.md) for project IDs and case protection.
+Model-selected bundles enter Review in move mode.
 
-### Dashboard and activity history
+### 2. Configure the source folders and start a scan
 
-- **Start Filing** (`启动整理`) scans the sources and keeps monitoring them. **Scan Source Folders** (`扫描源文件夹`) runs once.
-- **Pause Filing** (`暂停整理`) lets the current file or bundle finish safely. Click **Resume Filing** (`继续整理`) to continue. **Stop Filing** (`停止整理`) ends the pass. Starting again scans the sources afresh.
-- Progress is displayed as `processed/total`. An intact folder counts as one item. The dashboard also shows the current item or stage.
-- **Clear Activity** (`清空动态`) and **Clear Log** (`清空日志`) both start the activity views from the next new event. Operation history remains available for inspection and undo. File previews can be cleared separately.
+![Automation Settings showing the source, copy or move mode, confidence threshold, and folder-first option](assets/readme/automation-settings.png)
 
-### Run from source
+In **Automation Settings** (`自动化设置`), add your source folders and choose copy or move mode. Select your local `claude.exe` for model classification. Folder-first filing (`文件夹优先`) is enabled by default. For a first pass, the default copy and review settings let you inspect the classification results.
+
+Click **Scan Source Folders** (`扫描源文件夹`) to scan once, or **Start Filing** (`启动整理`) to keep monitoring. **Save and Start Automatic Filing** (`保存并启动自动整理`) saves the settings, enables automatic filing, and starts monitoring. **Pause Filing** (`暂停整理`) and **Stop Filing** (`停止整理`) take effect after the current item finishes. Resume a paused pass with **Resume Filing** (`继续整理`). Starting again after a stop scans the sources afresh.
+
+### 3. Review the category, tags, and explanation
+
+![Review page showing the commissioning notes, 71% confidence, suggested tags, and a content preview](assets/readme/review.png)
+
+In **Review** (`待审核`), select the commissioning notes to read the classification explanation, suggested tags, and a content excerpt. Choose Engineering Records / Test Deliveries in the dropdown, then click **File to Selected Category** (`按所选分类整理`). Use **Analyze Again** (`重新分析所选`) to get another suggestion.
+
+### 4. Find the delivery in the catalog
+
+![Catalog tree showing the archived gearbox delivery as a single bundle under Test Deliveries](assets/readme/folder-catalog.png)
+
+The gearbox delivery appears in the tree as a single bundle (`整包`). Double-click it to open the archived folder, or use **Export Markdown Catalog** (`导出目录 Markdown`) to generate the catalog. In the **File Library** (`文件资料库`), search by name, path, category, or tag.
+
+### 5. Inspect and undo an operation
+
+![Operation history showing the purchase contract copy with its status set to undone](assets/readme/operation-history.png)
+
+In **Operation History** (`整理记录`), select an operation and click **Undo Selected Operation** (`撤销所选操作`). FileAtlas verifies the content and paths before proceeding. The status `undone` confirms completion. **Clear Log** (`清空日志`) and **Clear Activity** (`清空动态`) reset the two activity views together. Operation history stays available for inspection and undo.
+
+## CAE project templates
+
+![CAE project dialog previewing project folders, the C001 baseline case, and protected directories](assets/readme/cae-template.png)
+
+In **Categories & Catalog** (`分类与目录`), create a CAE workspace and choose **New Engineering Project** (`新建工程项目`). Enter the project ID and name to preview its stages and the `C001` baseline case. The template marks folders eligible for filing and folders protected as a unit. Files with ambiguous project IDs go to Review. [CAE workflow](docs/CAE_WORKFLOW.md)
+
+## Run from source
 
 You need Windows 11 x64, Python 3.12, and an installed and configured copy of [Claude Code](https://code.claude.com/docs/en/overview). Tests and the empty application interface do not require a model account. Actual AI classification requires a working Claude Code service configuration.
 

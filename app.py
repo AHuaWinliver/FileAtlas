@@ -95,15 +95,12 @@ class TitleBar(QWidget):
         self.maximize()
 
 
-class PreviewSignals(QObject):
-    finished = Signal(str, str)
-
-
 class PreviewTask(QRunnable):
-    def __init__(self, fid, path):
+    def __init__(self, review, request, path, finished):
         super().__init__()
-        self.fid, self.path = fid, path
-        self.signals = PreviewSignals()
+        self.review, self.request = review, request
+        self.path = path
+        self.finished = finished
 
     def run(self):
         try:
@@ -118,7 +115,7 @@ class PreviewTask(QRunnable):
                 text = extract(self.path)[:5000] if self.path.is_file() else '项目已被外部移动或删除。'
         except Exception as exc:
             text = '无法预览：' + str(exc)
-        self.signals.finished.emit(self.fid, text)
+        self.finished.emit(self.review, self.request, text)
 
 
 class ClaudeCheckSignals(QObject):
@@ -276,12 +273,15 @@ class CategoryDialog(QDialog):
 
 
 class Window(QMainWindow):
+    preview_finished = Signal(bool, object, str)
+
     def __init__(self, store):
         super().__init__()
         self.store = store
         self.engine = Engine(store)
         self.worker = Worker(self.engine)
         self.preview_requests = {}
+        self.preview_finished.connect(self.finish_preview, Qt.ConnectionType.QueuedConnection)
         self.refresh_timer = QTimer(self)
         self.refresh_timer.setSingleShot(True)
         self.refresh_timer.setInterval(250)
@@ -774,24 +774,26 @@ class Window(QMainWindow):
             target.setPlainText(text + '正在读取预览…')
             progress.update_progress('正在读取文件预览')
             request = object()
-            self.preview_requests[review] = request
-            task = PreviewTask(f['id'], p)
-
-            def ready(fid, content):
-                if self.preview_requests.get(review) is not request:
-                    return
-                self.preview_requests.pop(review)
-                progress.update_progress()
-                table = self.review_table if review else self.file_table
-                if self.selected(table) == fid:
-                    target.setPlainText(text + content)
-                else:
-                    target.clear()
-            task.signals.finished.connect(ready)
+            self.preview_requests[review] = (request, f['id'], text)
+            task = PreviewTask(review, request, p, self.preview_finished)
             QThreadPool.globalInstance().start(task)
         else:
             target.clear()
             progress.update_progress()
+
+    def finish_preview(self, review, request, content):
+        pending = self.preview_requests.get(review)
+        if not pending or pending[0] is not request:
+            return
+        _, fid, header = self.preview_requests.pop(review)
+        table = self.review_table if review else self.file_table
+        target = self.review_preview if review else self.file_preview
+        progress = self.review_preview_progress if review else self.file_preview_progress
+        progress.update_progress()
+        if self.selected(table) == fid:
+            target.setPlainText(header + content)
+        else:
+            target.clear()
 
     def clear_preview(self, review):
         table = self.review_table if review else self.file_table
