@@ -24,7 +24,7 @@ FileAtlas 是一款面向 Windows 11 的文件整理桌面应用。为每个分�
 
 ### 使用 Windows 便携版
 
-已发布的 Windows 安装程序和便携包可在 GitHub Releases 下载。便携包解压后运行 `FileAtlas.exe`，保留同目录的 `_internal` 文件夹。v0.3.0 源码可从标签获取，运行和构建方法见下文。 [Windows 下载](https://github.com/AHuaWinliver/FileAtlas/releases) · [源码标签](https://github.com/AHuaWinliver/FileAtlas/tags)
+下载 v0.3.1 安装程序或便携包。便携包解压后运行 `FileAtlas.exe`，保留同目录的 `_internal` 文件夹。源码运行和构建方法见下文。 [Windows 下载与更新说明](https://github.com/AHuaWinliver/FileAtlas/releases/tag/v0.3.1) · [源码标签](https://github.com/AHuaWinliver/FileAtlas/tags)
 
 ## 图解整理流程
 

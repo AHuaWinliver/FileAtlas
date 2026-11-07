@@ -26,7 +26,7 @@ The screenshots use demo data and a simulated model response for the commissioni
 
 ### Windows portable application
 
-Download published Windows installers and portable packages from GitHub Releases. For a portable package, extract it, run `FileAtlas.exe`, and keep the `_internal` folder alongside it. Get v0.3.0 from the source tag and follow the run or build instructions below. [Windows downloads](https://github.com/AHuaWinliver/FileAtlas/releases) · [Source tags](https://github.com/AHuaWinliver/FileAtlas/tags)
+Download the v0.3.1 Windows installer or portable package. For the portable package, extract it, run `FileAtlas.exe`, and keep the `_internal` folder alongside it. Source and build instructions follow below. [Windows downloads and release notes](https://github.com/AHuaWinliver/FileAtlas/releases/tag/v0.3.1) · [Source tags](https://github.com/AHuaWinliver/FileAtlas/tags)
 
 ## Illustrated walkthrough
 
